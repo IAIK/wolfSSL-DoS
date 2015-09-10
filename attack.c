@@ -45,6 +45,11 @@ static const unsigned char cipher_suites[] = {
   0x00, 0x44, 0x00, 0xbd, 0x00, 0x87, 0x00, 0xc3, 0x00, 0x13, 0x00, 0x66
 };
 
+static const unsigned char signature_algorithms[] = {
+  0x06, 0x03, 0x05, 0x03, 0x04, 0x03, 0x02, 0x03, 0x06, 0x01, 0x05, 0x01,
+  0x04, 0x01, 0x02, 0x01
+};
+
 static unsigned short identification = 0;
 
 uint16_t checksum(const void* ptr, size_t len)
@@ -254,8 +259,22 @@ int run_round(unsigned int round, const char* interface_name,
   sendbuf[pos++] = 0x01;
   // compression method: 0
   sendbuf[pos++] = 0x00;
+  // extensions length: 2 bytes
+  const size_t extension_length = pos;
+  pos += 2;
+  const size_t extensions_start = pos;
+  // signature algorithms length: 2 byes
+  sendbuf[pos++] = (sizeof(signature_algorithms) & 0xff00) >> 8;
+  sendbuf[pos++] = (sizeof(signature_algorithms) & 0x00ff);
+  //  signature algorithms
+  memcpy(sendbuf + pos, signature_algorithms, sizeof(signature_algorithms));
+  pos += sizeof(signature_algorithms);
 
   // Lengths
+  const size_t extensions_size = pos - extensions_start;
+  sendbuf[extension_length + 0] = (extensions_size & 0xff00) >> 8;
+  sendbuf[extension_length + 1] = (extensions_size & 0x00ff);
+
   const size_t record_layer_size = pos - record_layer_start;
   sendbuf[record_layer_length + 0] = (record_layer_size & 0xff00) >> 8;
   sendbuf[record_layer_length + 1] = (record_layer_size & 0x00ff);

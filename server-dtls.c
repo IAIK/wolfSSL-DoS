@@ -64,7 +64,7 @@ int AwaitDGram(WOLFSSL_CTX* ctx)
             printf("Cannot create socket.\n");
             cleanup = 1;
         }
-        printf("Socket all/ocated\n");
+        printf("Socket allocated\n");
 
         /* clear servAddr each loop */
         memset((char *)&servAddr, 0, sizeof(servAddr));
