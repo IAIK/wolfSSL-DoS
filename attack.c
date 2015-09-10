@@ -263,6 +263,13 @@ int run_round(unsigned int round, const char* interface_name,
   const size_t extension_length = pos;
   pos += 2;
   const size_t extensions_start = pos;
+  // extension type: signature algorithms
+  sendbuf[pos++] = 0x00;
+  sendbuf[pos++] = 0x0d;
+  // extension length: 2 bytes
+  const size_t signature_algorithms_length = pos;
+  pos += 2;
+  const size_t signature_algorithms_start = pos;
   // signature algorithms length: 2 byes
   sendbuf[pos++] = (sizeof(signature_algorithms) & 0xff00) >> 8;
   sendbuf[pos++] = (sizeof(signature_algorithms) & 0x00ff);
@@ -271,6 +278,10 @@ int run_round(unsigned int round, const char* interface_name,
   pos += sizeof(signature_algorithms);
 
   // Lengths
+  const size_t signature_algorithms_size = pos - signature_algorithms_start;
+  sendbuf[signature_algorithms_length + 0] = (signature_algorithms_size & 0xff00) >> 8;
+  sendbuf[signature_algorithms_length + 1] = (signature_algorithms_size & 0x00ff);
+
   const size_t extensions_size = pos - extensions_start;
   sendbuf[extension_length + 0] = (extensions_size & 0xff00) >> 8;
   sendbuf[extension_length + 1] = (extensions_size & 0x00ff);
