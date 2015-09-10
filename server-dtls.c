@@ -197,7 +197,7 @@ int main(int argc, char** argv)
         return 1;
     }
     /* Load server certificates */
-    if (wolfSSL_CTX_use_certificate_file(ctx, servCertLoc, SSL_FILETYPE_PEM) != 
+    if (wolfSSL_CTX_use_certificate_chain_file(ctx, servCertLoc) != 
                                                                  SSL_SUCCESS) {
         printf("Error loading %s, please check the file.\n", servCertLoc);
         return 1;
