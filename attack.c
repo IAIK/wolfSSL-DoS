@@ -96,10 +96,12 @@ int run_round(unsigned int round, const char* interface_name,
     const char* target_addr, uint16_t target_port, const char* server_addr,
     uint16_t server_port, const unsigned char* server_hwaddr)
 {
-  struct sockaddr_ll socket_address;
-  memset(&socket_address, 0, sizeof(socket_address));
-  socket_address.sll_family = AF_PACKET;
-  socket_address.sll_halen = ETHER_ADDR_LEN;
+  struct sockaddr_storage storage;
+  memset(&storage, 0, sizeof(storage));
+
+  struct sockaddr_ll* socket_address = (struct sockaddr_ll*)&storage;
+  socket_address->sll_family = AF_PACKET;
+  socket_address->sll_halen = ETHER_ADDR_LEN;
 
   // raw socket
   const int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -118,7 +120,7 @@ int run_round(unsigned int round, const char* interface_name,
       close(sockfd);
       return 1;
     }
-    socket_address.sll_ifindex = if_idx.ifr_ifindex;
+    socket_address->sll_ifindex = if_idx.ifr_ifindex;
   }
 
   // MAC address of the interface
@@ -132,6 +134,7 @@ int run_round(unsigned int round, const char* interface_name,
   }
 
   char sendbuf[BUF_SIZ] = { 0 };
+  memset(sendbuf, 0, BUF_SIZ);
   size_t pos = 0;
 
   // Ethernet header
@@ -156,26 +159,29 @@ int run_round(unsigned int round, const char* interface_name,
       close(sockfd);
       return 1;
     } else if (ret >= 0) {
-      memcpy(eh->ether_dhost, arpreq.arp_ha.sa_data, 6);
+      memcpy(eh->ether_dhost, arpreq.arp_ha.sa_data, ETHER_ADDR_LEN);
+      memcpy(socket_address->sll_addr, arpreq.arp_ha.sa_data, ETHER_ADDR_LEN);
     } else {
       // try a broadcast address
-      memset(eh->ether_dhost, 0xff, 6);
+      memset(eh->ether_dhost, 0xff, ETHER_ADDR_LEN);
+      memset(socket_address->sll_addr, 0xff, ETHER_ADDR_LEN);
     }
   }
   eh->ether_type = htons(ETH_P_IP);
   pos += sizeof(struct ether_header);
-  memcpy(socket_address.sll_addr, eh->ether_dhost, 6);
 
   // IP header
   struct iphdr* iph = (struct iphdr*)(sendbuf + pos);
   iph->version = IPVERSION;
   iph->ihl = 5;
+  iph->id = htons(identification++);
   iph->tos = 0;
   iph->frag_off = ntohs(IP_DF);
   iph->ttl = IPDEFTTL;
   iph->protocol = SOL_UDP;
   iph->saddr = inet_addr(target_addr);
   iph->daddr = inet_addr(server_addr);
+  iph->check = 0;
   pos += iph->ihl * 4;
 
   // UDP header
@@ -240,7 +246,7 @@ int run_round(unsigned int round, const char* interface_name,
   }
   // cipher suite length
   sendbuf[pos++] = (sizeof(cipher_suites) & 0xff00) >> 8;
-  sendbuf[pos++] = sizeof(cipher_suites) & 0xff;
+  sendbuf[pos++] = (sizeof(cipher_suites) & 0x00ff);
   // cipher suites
   memcpy(sendbuf + pos, cipher_suites, sizeof(cipher_suites));
   pos += sizeof(cipher_suites);
@@ -263,11 +269,10 @@ int run_round(unsigned int round, const char* interface_name,
   // Remaining UDP header fields
   udph->len = htons(pos - data_start + sizeof(struct udphdr));
   // Remaining IP header fields
-  iph->id = htons(identification++);
   iph->tot_len = htons(pos - data_start + 4 * iph->ihl + sizeof(struct udphdr));
   iph->check = checksum(iph, iph->ihl * 4);
 
-  if (sendto(sockfd, sendbuf, pos, 0, (struct sockaddr*)&socket_address, sizeof(struct sockaddr_ll)) < 0)
+  if (sendto(sockfd, sendbuf, pos, 0, (struct sockaddr*)socket_address, sizeof(*socket_address)) < 0)
     printf("Send failed\n");
 
   close(sockfd);
@@ -340,8 +345,6 @@ int main(int argc, char** argv)
   printf("interface: %s\n", interface_name);
   printf("target: %s:%d\n", target_addr, target_port);
   printf("server: %s:%d\n", server_addr, server_port);
-  if (have_server_hwaddr)
-    printf("server hwaddr: %s\n", server_hwaddr);
 
   const unsigned char* server_hwaddrp = have_server_hwaddr ? server_hwaddr : NULL;
   for (unsigned int round = 0; round < 2; ++round) {

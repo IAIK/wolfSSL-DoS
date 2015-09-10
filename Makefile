@@ -1,4 +1,4 @@
-CFLAGS+=-std=gnu11 -Wall
+CFLAGS+=-std=gnu11 -Wall -g
 
 all: dtls-server attack target
 
