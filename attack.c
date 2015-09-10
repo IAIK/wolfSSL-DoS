@@ -1,6 +1,4 @@
 #include <arpa/inet.h>
-#include <errno.h>
-#include <getopt.h>
 #include <linux/if_packet.h>
 #include <net/if.h>
 #include <netinet/ether.h>
@@ -11,12 +9,14 @@
 #include <unistd.h>
 
 #include <bsd/string.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <getopt.h>
 
 #include <wolfssl/options.h>
 #include <wolfssl/wolfcrypt/sha.h>
@@ -86,9 +86,15 @@ size_t generate_cookie(char* buf, size_t sz, const char* target_addr,
   return sz;
 }
 
+void parse_hwaddr(unsigned char* target, const char* hwaddr)
+{
+  sscanf(hwaddr, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", &target[0], &target[1],
+      &target[2], &target[3], &target[4], &target[5]);
+}
+
 int run_round(unsigned int round, const char* interface_name,
     const char* target_addr, uint16_t target_port, const char* server_addr,
-    uint16_t server_port)
+    uint16_t server_port, const unsigned char* server_hwaddr)
 {
   struct sockaddr_ll socket_address;
   memset(&socket_address, 0, sizeof(socket_address));
@@ -115,7 +121,7 @@ int run_round(unsigned int round, const char* interface_name,
     socket_address.sll_ifindex = if_idx.ifr_ifindex;
   }
 
-  /* Get the MAC address of the interface to send on */
+  // MAC address of the interface
   struct ifreq if_mac;
   memset(&if_mac, 0, sizeof(struct ifreq));
   strlcpy(if_mac.ifr_name, interface_name, sizeof(if_mac.ifr_name));
@@ -131,8 +137,11 @@ int run_round(unsigned int round, const char* interface_name,
   // Ethernet header
   struct ether_header* eh = (struct ether_header*)sendbuf;
   memcpy(eh->ether_shost, if_mac.ifr_hwaddr.sa_data, 6);
-  // get destination MAC
-  {
+
+  if (server_hwaddr) {
+    memcpy(eh->ether_dhost, server_hwaddr, 6);
+  } else {
+    // try to get MAC address of the server
     struct arpreq arpreq;
     memset(&arpreq, 0, sizeof(arpreq));
     strlcpy(arpreq.arp_dev, interface_name, sizeof(arpreq.arp_dev));
@@ -147,17 +156,15 @@ int run_round(unsigned int round, const char* interface_name,
       close(sockfd);
       return 1;
     } else if (ret >= 0) {
-      // copy MAC
       memcpy(eh->ether_dhost, arpreq.arp_ha.sa_data, 6);
-      memcpy(socket_address.sll_addr, arpreq.arp_ha.sa_data, 6);
     } else {
-      // interface == lo?
-      memcpy(eh->ether_dhost, if_mac.ifr_hwaddr.sa_data, 6);
-      memcpy(socket_address.sll_addr, if_mac.ifr_hwaddr.sa_data, 6);
+      // try a broadcast address
+      memset(eh->ether_dhost, 0xff, 6);
     }
   }
   eh->ether_type = htons(ETH_P_IP);
   pos += sizeof(struct ether_header);
+  memcpy(socket_address.sll_addr, eh->ether_dhost, 6);
 
   // IP header
   struct iphdr* iph = (struct iphdr*)(sendbuf + pos);
@@ -275,8 +282,10 @@ int main(int argc, char** argv)
   char interface_name[64] = DEFAULT_IF;
   char target_addr[64] = TARGET_ADDR;
   char server_addr[64] = SERVER_ADDR;
+  unsigned char server_hwaddr[6] = { 0 };
   uint16_t target_port = TARGET_PORT;
   uint16_t server_port = SERVER_PORT;
+  bool have_server_hwaddr = false;
 
   while (true) {
     const static struct option long_options[] = {
@@ -285,12 +294,13 @@ int main(int argc, char** argv)
       {"target-port", required_argument, 0, 'p'},
       {"server-ip", required_argument, 0, 'S'},
       {"server-port", required_argument, 0, 'P'},
+      {"server-hwaddr", required_argument, 0, 'H'},
       {"help", no_argument, 0, 'h'},
       {0, 0, 0, 0}
     };
 
     int option_index = 0;
-    const int flag = getopt_long(argc, argv, "hi:t:p:S:P:", long_options, &option_index);
+    const int flag = getopt_long(argc, argv, "hi:t:p:S:P:H:", long_options, &option_index);
     if (flag == -1)
       break;
 
@@ -315,6 +325,11 @@ int main(int argc, char** argv)
         server_port = atoi(optarg);
         break;
 
+      case 'H':
+        parse_hwaddr(server_hwaddr, optarg);
+        have_server_hwaddr = true;
+        break;
+
       case 'h':
         printf("%s [--interface iface] [--target-ip ip] [--target-port port] "
             "[--server-ip ip] [--server-port port]\n", argv[0]);
@@ -325,10 +340,13 @@ int main(int argc, char** argv)
   printf("interface: %s\n", interface_name);
   printf("target: %s:%d\n", target_addr, target_port);
   printf("server: %s:%d\n", server_addr, server_port);
+  if (have_server_hwaddr)
+    printf("server hwaddr: %s\n", server_hwaddr);
 
+  const unsigned char* server_hwaddrp = have_server_hwaddr ? server_hwaddr : NULL;
   for (unsigned int round = 0; round < 2; ++round) {
     if (run_round(round, interface_name, target_addr, target_port, server_addr,
-          server_port) != 0)
+          server_port, server_hwaddrp) != 0)
       return 1;
   }
 
