@@ -62,7 +62,7 @@ uint16_t checksum(const void* ptr, size_t len)
   }
 
   while (sum >> 16) {
-    sum = (sum & 0xfffff) + (sum >> 16);
+    sum = (sum & 0xffff) + (sum >> 16);
   }
 
   return (~sum);
