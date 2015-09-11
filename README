@@ -1,0 +1,39 @@
+DoS attack on wolfSSL DTLS server
+=================================
+
+This is a simple example sending ClientHello messages with spoofed sender
+addresses but valid cookies to a wolfSSL based DTLS server.
+
+ * attack.c: Sends the spoofed ClientHello messages.
+ * dtls-server.c: Very simple DTLS server (slightly modified version of [1])
+ * target.c: Listens and prints the number of bytes received.
+
+Assume the following scenario:
+
+  * dtls-server runs on a machine with IP 192.168.0.1.
+  * target runs on a machine with IP 192.168.0.2.
+  * attack runs on any other machine.
+
+Now run
+
+  $ attack -i $interface --server 192.168.0.1 --target 192.168.0.2
+
+where $interface is the network interface the packets should be sent on. If
+there is a gateway involved or attack can not detect the MAC address of the
+server, specify --server-hwaddr.
+
+attack needs superuser privileges to run.
+
+With the included example keys and certificates, target should print
+
+Received 48 bytes. (for the HelloVerifyRequest message)
+
+and 7 times
+
+Received 95 bytes. (for the ServerHello message)
+Received 3281 bytes. (for the Certificate message)
+Received 482 bytes. (for the ServerKeyExchange message)
+Received 25 bytes. (for the ServerHelloDone message)
+
+
+[1] https://github.com/wolfSSL/wolfssl-examples/blob/master/dtls/server-dtls.c
