@@ -1,6 +1,7 @@
 /**
- * Copyright (c) 2015, Institute for Applied Information Processing and
- *                     Communications, University of Technology Graz
+ * Copyright (c) 2015, Stiftung SIC and Institute for Applied Information
+ *                     Processing and Communications, University of Technology
+ *                     Graz
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
