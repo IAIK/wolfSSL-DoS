@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define SERV_PORT 11112
 
@@ -30,16 +31,27 @@ int main()
     return 1;
   }
 
+  char* buffer = malloc(16 * 1024);
+  if (!buffer) {
+    perror("malloc()");
+    close(fd);
+    return 1;
+  }
+
+  int ret = 0;
   while (true) {
-    char buffer[4096];
-    const ssize_t recv = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
+    const ssize_t recv = recvfrom(fd, buffer, 16 * 1024, 0, NULL, NULL);
     if (recv < 0) {
       perror("recvfrom()");
-      close(fd);
-      return 1;
+      ret = 1;
+      break;
     }
 
     printf("Received %zd bytes.\n", recv);
     fflush(stdout);
   }
+
+  free(buffer);
+  close(fd);
+  return ret;
 }
